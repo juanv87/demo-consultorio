@@ -1,0 +1,142 @@
+{
+  "name": "Recordatorio de Turnos (Email)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "df4d4880-a52a-4c3d-b30f-07e22b75f43b",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select t.id as turno_id, t.start_time, p.nombre as paciente_nombre,\n       p.email, pr.nombre as profesional_nombre\nfrom turnos t\njoin pacientes p on p.id = t.paciente_id\njoin profesionales pr on pr.id = t.profesional_id\nwhere t.status = 'confirmado'\n  and p.email is not null\n  and t.recordatorio_enviado = false\n  and t.start_time >= date_trunc('day', now() + interval '1 day')\n  and t.start_time <  date_trunc('day', now() + interval '2 days');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "id": "069e3524-4d20-4d5c-abbd-725511177c21",
+      "name": "Turnos de Manana con Email",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "Recordatorio de tu turno",
+        "emailType": "html",
+        "message": "={{ (() => { const nombre = $json.paciente_nombre; const profesional = $json.profesional_nombre; const fecha = new Date($json.start_time); const min = fecha.getMinutes(); const horaTexto = min === 0 ? `${fecha.getHours()}hs` : `${fecha.getHours()}:${min.toString().padStart(2, '0')}hs`; return `<div style=\"background:#f8fafc;padding:32px 16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;\"><p style=\"margin:0 0 20px;color:#0f172a;font-size:15px;\">Hola ${nombre},</p><div style=\"max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;\"><div style=\"background:#0369a1;padding:16px 24px;\"><p style=\"margin:0;color:#ffffff;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;\">Recordatorio de turno</p></div><div style=\"padding:24px;\"><p style=\"margin:0 0 12px;color:#0f172a;font-size:20px;font-weight:700;\">Mañana a las ${horaTexto}</p><p style=\"margin:0;color:#64748b;font-size:14px;\">Con ${profesional}</p></div></div><p style=\"margin:20px 0 0;color:#64748b;font-size:14px;\">¡Te esperamos!</p></div>`; })() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "905736d2-da7e-4aee-9585-d291dd0b3fcc",
+      "name": "Recordatorio de Turno al Paciente",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "mOd9cxG3JSAyFq9r",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update turnos set recordatorio_enviado = true where id = '{{ $json.turno_id }}'::uuid;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        672,
+        0
+      ],
+      "id": "e4241862-afb0-4738-9e4c-6d61e359b803",
+      "name": "Marcar Recordatorio Enviado",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Turnos de Manana con Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Turnos de Manana con Email": {
+      "main": [
+        [
+          {
+            "node": "Recordatorio de Turno al Paciente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recordatorio de Turno al Paciente": {
+      "main": [
+        [
+          {
+            "node": "Marcar Recordatorio Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "87f699f7-796e-49bd-99d4-f64a9da9b42f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "052af547fa6dedaab801250a0426425c2c1468346a7dec1838caadb69dd35b0e"
+  },
+  "id": "f3c9872c-c5f5-4d11-8bf8-b0c6a50365d3",
+  "tags": []
+}

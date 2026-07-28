@@ -1,0 +1,77 @@
+{
+  "name": "Log Mensaje",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "telefono"
+            },
+            {
+              "name": "remitente"
+            },
+            {
+              "name": "contenido"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b8f8c724-ee95-4855-97fb-0d900bbb6bee",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into mensajes (telefono, remitente, contenido)\nvalues (\n  '{{ $json.telefono }}',\n  '{{ $json.remitente }}',\n  '{{ $json.contenido }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        0
+      ],
+      "id": "d7f3a5f4-1a96-4145-b994-40a38657869e",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5e9bc98c-75df-4250-b34b-f5ad0eaf21d3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "052af547fa6dedaab801250a0426425c2c1468346a7dec1838caadb69dd35b0e"
+  },
+  "id": "PEr1zjn39MEv4B0i",
+  "tags": []
+}

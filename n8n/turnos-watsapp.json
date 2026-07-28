@@ -11,26 +11,26 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -1664,
-        -224
+        -4704,
+        512
       ],
-      "id": "c23afd20-cfa2-4555-a712-601eb03cbe0e",
+      "id": "e6302727-3acf-4b99-9931-af3a1c33a215",
       "name": "Webhook",
       "webhookId": "c8161c4b-11a9-426a-8d49-904471580126"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={ \"output\": \"Estos son los horarios disponibles con la Dra. Pérez:\\n\\n1. lunes 20/7, 09:00\\n2. lunes 20/7, 09:30\\n3. lunes 20/7, 10:00\\n4. lunes 20/7, 10:30\\n5. lunes 20/7, 11:00\\n\\nRespondé con el número del horario que preferís.\" }\n",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        832,
-        160
+        -1312,
+        896
       ],
-      "id": "b1dc88ad-754d-4106-86e8-1f08d97a25c2",
+      "id": "d6b637a1-8369-4a2e-8afa-d1cb2bd33582",
       "name": "Respond to Webhook"
     },
     {
@@ -44,7 +44,7 @@
         "messages": {
           "values": [
             {
-              "content": "=Sos un clasificador de intención para mensajes de WhatsApp de un consultorio médico.\nDado el mensaje del usuario, respondé ÚNICAMENTE con una de estas palabras, sin explicación:\n- AGENDAR (quiere sacar un turno nuevo)\n- CANCELAR (quiere cancelar o reprogramar)\n- PREGUNTA (consulta general: horarios, ubicación, precios)\n- URGENTE (algo que requiere atención humana inmediata, síntomas, emergencia)\n\nMensaje del usuario: {{ $('Input').item.json.body.mensaje }}"
+              "content": "=Sos un clasificador de intención para mensajes de WhatsApp de un consultorio médico.\n\n{{ $json.contenido ? \"El bot le había dicho al paciente: \\\"\" + $json.contenido + \"\\\"\" : \"Esta es la primera interacción del paciente, sin mensaje previo del bot.\" }}\n\nEl paciente ahora escribió: \"{{ $('Input').first().json.body.mensaje }}\"\n\nClasificá la intención REAL del paciente, considerando el contexto de la \nconversación completa (no solo la última palabra suelta). Por ejemplo: si \nel bot preguntó algo relacionado a sacar un turno y el paciente respondió \nafirmativamente (\"si\", \"dale\", \"sí quiero\", \"obvio\"), clasificalo como \nAGENDAR, no como una categoría ambigua.\n\nRespondé ÚNICAMENTE con una de estas palabras, sin explicación:\n- AGENDAR\n- CANCELAR\n- PREGUNTA\n- URGENTE"
             }
           ]
         },
@@ -53,10 +53,10 @@
       "type": "@n8n/n8n-nodes-langchain.anthropic",
       "typeVersion": 1,
       "position": [
-        -992,
-        544
+        -3584,
+        1280
       ],
-      "id": "4953f71d-ac4a-4bba-8f3f-f016c080a66c",
+      "id": "ec43dc99-8d87-4106-9cf1-3d6d66933e47",
       "name": "Message a model",
       "credentials": {
         "anthropicApi": {
@@ -172,10 +172,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        -640,
-        512
+        -3232,
+        1248
       ],
-      "id": "92cacc1b-fefa-4d8b-9b9e-90ff8e8d2c58",
+      "id": "ab546008-711c-481b-83b0-04db5d56f0bb",
       "name": "Switch"
     },
     {
@@ -186,10 +186,10 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        -416,
-        160
+        -3008,
+        896
       ],
-      "id": "f459e355-5739-474b-88fc-41574312ff16",
+      "id": "bc47e7b7-785d-4691-b659-9a24babb9483",
       "name": "Supabase - Profesional",
       "credentials": {
         "supabaseApi": {
@@ -197,6 +197,109 @@
           "name": "Supabase account"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "const profesionales = $('Supabase - Profesional').all().map(item => item.json);\n\nconst formateados = profesionales.map((p, index) => {\n  return `${index + 1}. ${p.nombre}${p.especialidad ? ' - ' + p.especialidad : ''}`;\n});\n\nconst mensajeTexto = `¿Con qué profesional te gustaría atenderte?\\n\\n${formateados.join('\\n')}\\n\\nRespondé con el número.`;\n\nreturn [{\n  json: {\n    profesionales_disponibles: profesionales,\n    output: mensajeTexto\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2720,
+        1088
+      ],
+      "id": "1a2b3c4d-5e6f-4789-a0b1-c2d3e4f5a6b7",
+      "name": "Code in JavaScript - Listar Profesionales"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into conversaciones_activas (telefono, estado, contexto, updated_at)\nvalues ('{{ $('Input').first().json.body.telefono }}', 'eligiendo_profesional', '{{ JSON.stringify($json.profesionales_disponibles) }}'::jsonb, now())\non conflict (telefono)\ndo update set estado = excluded.estado, contexto = excluded.contexto, updated_at = now();",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2432,
+        1088
+      ],
+      "id": "2b3c4d5e-6f7a-4890-b1c2-d3e4f5a6b7c8",
+      "name": "Execute a SQL query - Eligiendo Profesional",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c4d5e6f-7a8b-4901-c2d3-e4f5a6b7c8d9",
+              "name": "output",
+              "value": "={{ $('Code in JavaScript - Listar Profesionales').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2208,
+        1088
+      ],
+      "id": "4d5e6f7a-8b9c-4012-d3e4-f5a6b7c8d9e0",
+      "name": "Set Output - Eligiendo Profesional"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mensajeUsuario = $('Input').first().json.body.mensaje.trim();\nconst contexto = $json.contexto; // array de profesionales, viene del nodo Postgres\n\nconst numeroElegido = parseInt(mensajeUsuario, 10);\n\nif (isNaN(numeroElegido) || numeroElegido < 1 || numeroElegido > contexto.length) {\n  return [{\n    json: {\n      valido: false,\n      output: `No entendí tu respuesta. Por favor, respondé con un número del 1 al ${contexto.length} según los profesionales que te ofrecí.`\n    }\n  }];\n}\n\nconst profesionalElegido = contexto[numeroElegido - 1];\n\nreturn [{\n  json: {\n    valido: true,\n    profesional_id: profesionalElegido.id,\n    profesional: profesionalElegido\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3520,
+        -400
+      ],
+      "id": "5e6f7a8b-9c0d-4123-e4f5-a6b7c8d9e0f1",
+      "name": "Code in JavaScript - Validar Profesional"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6f7a8b9c-0d1e-4234-f5a6-b7c8d9e0f1a2",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3232,
+        -400
+      ],
+      "id": "7a8b9c0d-1e2f-4345-a6b7-c8d9e0f1a2b3",
+      "name": "If - Profesional Valido"
     },
     {
       "parameters": {
@@ -213,6 +316,11 @@
               "keyName": "start_time",
               "condition": "gte",
               "keyValue": "={{ $now.toISO() }}"
+            },
+            {
+              "keyName": "profesional_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.profesional_id }}"
             }
           ]
         }
@@ -220,10 +328,10 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        -128,
-        160
+        -2720,
+        896
       ],
-      "id": "e76bd854-3a83-43d8-9e6b-e16ecb1f0f92",
+      "id": "80a242a9-fb0d-4308-bf08-51efee27e50a",
       "name": "Supabase - Turnos",
       "alwaysOutputData": true,
       "credentials": {
@@ -235,30 +343,30 @@
     },
     {
       "parameters": {
-        "jsCode": "const profesional = $('Supabase - Profesional').first().json;\nconst turnosOcupados = $('Supabase - Turnos').all().map(item => item.json).filter(t => t.start_time);\n\nconst duracion = profesional.duracion_consulta_minutes;\nconst slots = [];\nconst hoy = new Date();\n\nfor (let dia = 0; dia < 7; dia++) {\n  const fecha = new Date(hoy);\n  fecha.setDate(hoy.getDate() + dia);\n  const diaSemana = fecha.getDay();\n\n  if (diaSemana === 0 && !profesional.atiende_domingos) continue;\n  if (diaSemana === 6 && !profesional.atiende_sabados) continue;\n\n  const [horaInicio] = profesional.hora_inicio.split(':').map(Number);\n  const [horaFin] = profesional.hora_fin.split(':').map(Number);\n\n  for (let hora = horaInicio; hora < horaFin; hora += duracion / 60) {\n    const slotStart = new Date(fecha);\n    slotStart.setHours(Math.floor(hora), (hora % 1) * 60, 0, 0);\n    const slotEnd = new Date(slotStart.getTime() + duracion * 60000);\n\n    const ocupado = turnosOcupados.some(t => {\n      const tStart = new Date(t.start_time);\n      const tEnd = new Date(tStart.getTime() + duracion * 60000);\n      return slotStart < tEnd && slotEnd > tStart;\n    });\n\n    if (!ocupado && slotStart > hoy) {\n      slots.push(slotStart.toISOString());\n    }\n  }\n}\n\nconst slotsElegidos = slots.slice(0, 5);\n\n// Texto legible en español para cada slot\nconst formateados = slotsElegidos.map((iso, index) => {\n  const fecha = new Date(iso);\n  const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\n  const diaNombre = diasSemana[fecha.getDay()];\n  const diaMes = fecha.getDate();\n  const mes = fecha.getMonth() + 1;\n  const hora = fecha.getHours().toString().padStart(2, '0');\n  const min = fecha.getMinutes().toString().padStart(2, '0');\n  return `${index + 1}. ${diaNombre} ${diaMes}/${mes}, ${hora}:${min}`;\n});\n\nconst mensajeTexto = `Estos son los horarios disponibles con la ${profesional.nombre}:\\n\\n${formateados.join('\\n')}\\n\\nRespondé con el número del horario que preferís.`;\n\nreturn [{\n  json: {\n    horarios_disponibles: slotsElegidos,\n    output: mensajeTexto\n  }\n}];"
+        "jsCode": "const profesional = $('Code in JavaScript - Validar Profesional').first().json.profesional;\nconst turnosOcupados = $('Supabase - Turnos').all().map(item => item.json).filter(t => t.start_time);\n\nconst duracion = profesional.duracion_consulta_minutes;\nconst slots = [];\nconst hoy = new Date();\n\nfor (let dia = 0; dia < 7; dia++) {\n  const fecha = new Date(hoy);\n  fecha.setDate(hoy.getDate() + dia);\n  const diaSemana = fecha.getDay();\n\n  if (diaSemana === 0 && !profesional.atiende_domingos) continue;\n  if (diaSemana === 6 && !profesional.atiende_sabados) continue;\n\n  const [horaInicio] = profesional.hora_inicio.split(':').map(Number);\n  const [horaFin] = profesional.hora_fin.split(':').map(Number);\n\n  for (let hora = horaInicio; hora < horaFin; hora += duracion / 60) {\n    const slotStart = new Date(fecha);\n    slotStart.setHours(Math.floor(hora), (hora % 1) * 60, 0, 0);\n    const slotEnd = new Date(slotStart.getTime() + duracion * 60000);\n\n    const ocupado = turnosOcupados.some(t => {\n      const tStart = new Date(t.start_time);\n      const tEnd = new Date(tStart.getTime() + duracion * 60000);\n      return slotStart < tEnd && slotEnd > tStart;\n    });\n\n    if (!ocupado && slotStart > hoy) {\n      slots.push(slotStart.toISOString());\n    }\n  }\n}\n\nconst slotsElegidos = slots.slice(0, 5);\n\n// Texto legible en español para cada slot\nconst formateados = slotsElegidos.map((iso, index) => {\n  const fecha = new Date(iso);\n  const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];\n  const diaNombre = diasSemana[fecha.getDay()];\n  const diaMes = fecha.getDate();\n  const mes = fecha.getMonth() + 1;\n  const hora = fecha.getHours().toString().padStart(2, '0');\n  const min = fecha.getMinutes().toString().padStart(2, '0');\n  return `${index + 1}. ${diaNombre} ${diaMes}/${mes}, ${hora}:${min}`;\n});\n\nconst mensajeTexto = `Estos son los horarios disponibles con ${profesional.nombre}:\\n\\n${formateados.join('\\n')}\\n\\nRespondé con el número del horario que preferís.`;\n\nreturn [{\n  json: {\n    profesional_id: profesional.id,\n    horarios_disponibles: slotsElegidos,\n    output: mensajeTexto\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        160,
-        160
+        -2432,
+        896
       ],
-      "id": "7009971f-7edb-4f2b-b82c-ce0994a1febf",
+      "id": "cb50b10e-b16a-4066-9e5e-57f4925ebe13",
       "name": "Code in JavaScript"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "insert into conversaciones_activas (telefono, estado, contexto, updated_at)\nvalues ('{{ $('Input').item.json.body.telefono }}', 'esperando_horario', '{{ JSON.stringify($json.horarios_disponibles) }}'::jsonb, now())\non conflict (telefono)\ndo update set estado = excluded.estado, contexto = excluded.contexto, updated_at = now();",
+        "query": "insert into conversaciones_activas (telefono, estado, contexto, updated_at)\nvalues ('{{ $('Input').first().json.body.telefono }}', 'esperando_horario', '{{ JSON.stringify({ profesional_id: $json.profesional_id, horarios: $json.horarios_disponibles }) }}'::jsonb, now())\non conflict (telefono)\ndo update set estado = excluded.estado, contexto = excluded.contexto, updated_at = now();",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        384,
-        160
+        -2208,
+        896
       ],
-      "id": "3635a421-677f-4eb9-8758-fee4278a070c",
+      "id": "3d0267a7-e715-4788-89bc-f8aa44d4c563",
       "name": "Execute a SQL query",
       "credentials": {
         "postgres": {
@@ -270,16 +378,16 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select estado, contexto from conversaciones_activas\nwhere telefono = '{{ $json.body.telefono }}';",
+        "query": "select estado, contexto from conversaciones_activas\nwhere telefono = '{{ $('Input').first().json.body.telefono }}';",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -1440,
-        -320
+        -4032,
+        416
       ],
-      "id": "91b37ed6-6963-4c0e-84b8-340cdfde1e12",
+      "id": "02c74e78-020f-4f99-a2cc-1ab71c1fcc91",
       "name": "Execute a SQL query1",
       "alwaysOutputData": true,
       "credentials": {
@@ -364,6 +472,78 @@
               },
               "renameOutput": true,
               "outputKey": "ConfirmandoCancelacion"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c4d5e6f7-89ab-4cde-9f01-234567890abc",
+                    "leftValue": "={{ $json.estado }}",
+                    "rightValue": "eligiendo_profesional",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "EligiendoProfesional"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f99e2aed-00cb-4c42-a435-4b5dc4667bd1",
+                    "leftValue": "={{ $json.estado }}",
+                    "rightValue": "esperando_confirmacion_email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "EsperandoConfirmacionEmail"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "90af38a1-e0a0-4f46-b6e2-86556988e750",
+                    "leftValue": "={{ $json.estado }}",
+                    "rightValue": "esperando_email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "EsperandoEmail"
             }
           ]
         },
@@ -376,23 +556,23 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        -1216,
-        -352
+        -3808,
+        384
       ],
-      "id": "f32c5e75-c3f1-433a-b5b5-9c451c0a226d",
+      "id": "4701a4b9-b6c2-433b-86f9-98c2b384c76f",
       "name": "Switch1"
     },
     {
       "parameters": {
-        "jsCode": "const mensajeUsuario = $('Input').first().json.body.mensaje.trim();\nconst contexto = $json.contexto; // viene del nodo Postgres, ya es el array de horarios\n\nconst numeroElegido = parseInt(mensajeUsuario, 10);\n\nif (isNaN(numeroElegido) || numeroElegido < 1 || numeroElegido > contexto.length) {\n  return [{\n    json: {\n      valido: false,\n      output: `No entendí tu respuesta. Por favor, respondé con un número del 1 al ${contexto.length} según los horarios que te ofrecí.`\n    }\n  }];\n}\n\nconst horarioElegido = contexto[numeroElegido - 1];\n\nreturn [{\n  json: {\n    valido: true,\n    horario_elegido: horarioElegido,\n    output: '¡Perfecto! Para confirmar tu turno, decime tu nombre completo.'\n  }\n}];"
+        "jsCode": "const mensajeUsuario = $('Input').first().json.body.mensaje.trim();\nconst contexto = $json.contexto; // viene del nodo Postgres: { profesional_id, horarios }\nconst horarios = contexto.horarios;\n\nconst numeroElegido = parseInt(mensajeUsuario, 10);\n\nif (isNaN(numeroElegido) || numeroElegido < 1 || numeroElegido > horarios.length) {\n  return [{\n    json: {\n      valido: false,\n      output: `No entendí tu respuesta. Por favor, respondé con un número del 1 al ${horarios.length} según los horarios que te ofrecí.`\n    }\n  }];\n}\n\nconst horarioElegido = horarios[numeroElegido - 1];\n\nreturn [{\n  json: {\n    valido: true,\n    horario_elegido: horarioElegido,\n    profesional_id: contexto.profesional_id,\n    output: '¡Perfecto! Para confirmar tu turno, decime tu nombre completo.'\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -928,
-        -896
+        -3520,
+        -160
       ],
-      "id": "0f0e9e4c-5c6f-4a01-9f37-117f1e5d0e20",
+      "id": "52e8aed9-d8c8-47a6-8066-4fbc247a72ca",
       "name": "Code in JavaScript1"
     },
     {
@@ -422,25 +602,25 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -640,
-        -896
+        -3232,
+        -160
       ],
-      "id": "c8c59f01-f741-49dd-b6fe-9383a6f75e54",
+      "id": "e551500f-b316-49fe-a618-92aeec35e54b",
       "name": "If"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "update conversaciones_activas\nset estado = 'esperando_nombre',\n    contexto = '{{ JSON.stringify({ horario_elegido: $json.horario_elegido }) }}'::jsonb,\n    updated_at = now()\nwhere telefono = '{{ $('Input').first().json.body.telefono }}';",
+        "query": "update conversaciones_activas\nset estado = 'esperando_nombre',\n    contexto = '{{ JSON.stringify({ horario_elegido: $json.horario_elegido, profesional_id: $json.profesional_id }) }}'::jsonb,\n    updated_at = now()\nwhere telefono = '{{ $('Input').first().json.body.telefono }}';",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -416,
-        -992
+        -3008,
+        -256
       ],
-      "id": "c14dee3f-7241-40ce-b131-98646fcab953",
+      "id": "03f973a4-f2ab-403e-ba26-1b91835154ad",
       "name": "Execute a SQL query2",
       "credentials": {
         "postgres": {
@@ -458,10 +638,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        160,
-        -992
+        -1984,
+        -256
       ],
-      "id": "0eaebbc6-eef9-4066-93e7-2bd63c051ccb",
+      "id": "a42d4c2c-c8c3-476d-a34f-655abef0a603",
       "name": "Respond to Webhook4"
     },
     {
@@ -473,25 +653,25 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -416,
-        -800
+        -2432,
+        -64
       ],
-      "id": "668180e3-a3d0-42e1-a3e2-34f9ec04f4d2",
+      "id": "b92a5f6c-e912-4ffd-896f-ed6e37578d17",
       "name": "Respond to Webhook5"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "with paciente_upsert as (\n  insert into pacientes (nombre, telefono)\n  values ('{{ $('Input').first().json.body.mensaje.trim() }}', '{{ $('Input').first().json.body.telefono }}')\n  on conflict (telefono) do update set nombre = excluded.nombre\n  returning id\n),\ndatos_profesional as (\n  select id, duracion_consulta_minutes from profesionales limit 1\n),\nturno_insert as (\n  insert into turnos (paciente_id, profesional_id, start_time, end_time)\n  select\n    paciente_upsert.id,\n    datos_profesional.id,\n    ('{{ JSON.stringify($json.contexto )}}'::jsonb ->> 'horario_elegido')::timestamptz,\n      ('{{  JSON.stringify($json.contexto )}}'::jsonb ->> 'horario_elegido')::timestamptz\n      + (datos_profesional.duracion_consulta_minutes || ' minutes')::interval\n  from paciente_upsert, datos_profesional\n  returning start_time\n)\nselect * from turno_insert;",
+        "query": "with paciente_upsert as (\n  insert into pacientes (nombre, telefono)\n  values ('{{ $('Input').first().json.body.mensaje.trim() }}', '{{ $('Input').first().json.body.telefono }}')\n  on conflict (telefono) do update set nombre = excluded.nombre\n  returning id\n),\ndatos_profesional as (\n  select id, duracion_consulta_minutes from profesionales\n  where id = ('{{ JSON.stringify($json.contexto) }}'::jsonb ->> 'profesional_id')::uuid\n),\nturno_insert as (\n  insert into turnos (paciente_id, profesional_id, start_time, end_time)\n  select\n    paciente_upsert.id,\n    datos_profesional.id,\n    ('{{ JSON.stringify($json.contexto )}}'::jsonb ->> 'horario_elegido')::timestamptz,\n      ('{{  JSON.stringify($json.contexto )}}'::jsonb ->> 'horario_elegido')::timestamptz\n      + (datos_profesional.duracion_consulta_minutes || ' minutes')::interval\n  from paciente_upsert, datos_profesional\n  returning start_time\n)\nselect turno_insert.start_time, paciente_upsert.id as paciente_id\nfrom turno_insert, paciente_upsert;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -928,
-        -512
+        -3520,
+        224
       ],
-      "id": "b078c485-c9fd-40d0-b126-422bf8c6a5ca",
+      "id": "fcdd5961-16e4-4e05-8ada-0a227e52d33b",
       "name": "Execute a SQL query3",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -532,10 +712,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -640,
-        -512
+        -3232,
+        224
       ],
-      "id": "2208a87f-a89d-45db-add7-3333b2508bae",
+      "id": "20aa2795-21a5-41a3-ac6a-7ece554cba19",
       "name": "If1"
     },
     {
@@ -547,10 +727,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -416,
-        -416
+        -2208,
+        320
       ],
-      "id": "ccd49c61-09c6-4ecd-82a6-379903d9021d",
+      "id": "7b8acd94-b809-4ae7-a438-ec9488ec4afe",
       "name": "Execute a SQL query5",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -570,10 +750,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -128,
-        -608
+        -2208,
+        128
       ],
-      "id": "40487924-9903-45fc-ac47-9c31468f32ca",
+      "id": "dcc5efae-d9d3-45a1-b40f-a6a728b0a751",
       "name": "Respond to Webhook6"
     },
     {
@@ -583,26 +763,26 @@
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.4,
       "position": [
-        -1888,
-        -416
+        -4704,
+        320
       ],
-      "id": "a19fc9b8-e818-4725-a3f1-427ed9ef6e68",
+      "id": "b536a30f-8050-4627-93d6-1a8e3ce3e091",
       "name": "When chat message received",
       "webhookId": "2a92ac76-5ae9-4d2f-96fe-8d7bede9ca11"
     },
     {
       "parameters": {
         "mode": "raw",
-        "jsonOutput": "={\n  \"body.mensaje\": {{ JSON.stringify($json.chatInput) }},\n  \"body.telefono\": {{ JSON.stringify($json.sessionId) }}\n}",
+        "jsonOutput": "={\n  \"body.mensaje\": {{ JSON.stringify($json.body.mensaje) }},\n  \"body.telefono\": {{ JSON.stringify($json.body.telefono) }}\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1664,
-        -416
+        -4480,
+        416
       ],
-      "id": "708b1161-c94b-4de9-86d2-36f950f21f51",
+      "id": "19102eb3-2e68-492f-94cf-8b65c83847ba",
       "name": "Input"
     },
     {
@@ -622,10 +802,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        160,
-        544
+        -2432,
+        1280
       ],
-      "id": "db8214c9-d29d-4701-a5a7-2804c8d5a0a5",
+      "id": "ab2a2a41-8d0b-4659-a44f-e5ec1a8483fe",
       "name": "Set Output - CANCELAR"
     },
     {
@@ -645,34 +825,11 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        160,
-        736
+        -2432,
+        1472
       ],
-      "id": "d48ded79-c7ad-4905-a0f9-48b1a9312e28",
+      "id": "ced21081-9c8f-4216-a635-a199a9c16e68",
       "name": "Set Output - PREGUNTA"
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "42080647-7048-470a-90b2-ed2e756971e1",
-              "name": "output",
-              "value": "rama urgente",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -416,
-        928
-      ],
-      "id": "03b88fa7-4b57-4ba3-8246-3811d9f5576f",
-      "name": "Set Output - URGENTE"
     },
     {
       "parameters": {
@@ -691,10 +848,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -416,
-        -608
+        -3008,
+        128
       ],
-      "id": "4aceadc1-ce89-450b-a72c-21d9191e6ccf",
+      "id": "90e50be2-5eb1-45dd-9917-ea822c09c04e",
       "name": "Set Output - Conflicto Horario"
     },
     {
@@ -704,7 +861,7 @@
             {
               "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
               "name": "output",
-              "value": "¡Turno confirmado! Te esperamos.",
+              "value": "={{ (() => { const fecha = new Date($('Switch1').first().json.contexto.horario_elegido); const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; const diaNombre = diasSemana[fecha.getDay()]; const diaMes = fecha.getDate(); const min = fecha.getMinutes(); const horaTexto = min === 0 ? `${fecha.getHours()}hs` : `${fecha.getHours()}:${min.toString().padStart(2, '0')}hs`; return `Turno confirmado para el ${diaNombre} ${diaMes} a las ${horaTexto}. ¡Te esperamos!`; })() }}",
               "type": "string"
             }
           ]
@@ -714,10 +871,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -128,
-        -416
+        -1984,
+        320
       ],
-      "id": "023f8007-8fb3-4f7e-a010-f5b377dfbab3",
+      "id": "42fff49c-d56e-49a3-8f29-ca6829be3d09",
       "name": "Set Output - Turno Confirmado"
     },
     {
@@ -729,10 +886,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        160,
-        -416
+        -1312,
+        320
       ],
-      "id": "e65861c9-870f-4740-8c8e-d9fc4b11f2f5",
+      "id": "0371b4c9-0f8b-4d81-a51d-66dd4c0b1795",
       "name": "Respond to Webhook - Turno Confirmado"
     },
     {
@@ -752,25 +909,25 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        608,
-        160
+        -1984,
+        896
       ],
-      "id": "7f5d904b-28cc-42ec-af96-b89c6a0c22db",
+      "id": "af10d86b-82d3-4e4d-9d53-f5a4669d7193",
       "name": "Edit Fields"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select nombre, especialidad, hora_inicio, hora_fin, atiende_sabados, atiende_domingos, duracion_consulta_minutes\nfrom profesionales\nlimit 1;",
+        "query": "select string_agg(format('- %s (%s): atiende de %s a %s%s%s, turnos de %s minutos.', nombre, coalesce(especialidad, 'general'), hora_inicio, hora_fin, case when atiende_sabados then ', también sábados' else '' end, case when atiende_domingos then ', también domingos' else '' end, duracion_consulta_minutes), chr(10)) as profesionales\nfrom profesionales;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -416,
-        736
+        -3008,
+        1472
       ],
-      "id": "ac55db33-48a0-4221-b8e6-552e656dbf70",
+      "id": "d70e4531-4de6-4546-923a-31ae26c2d3ea",
       "name": "Execute a SQL query6",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -792,7 +949,7 @@
         "messages": {
           "values": [
             {
-              "content": "=Sos el asistente de WhatsApp de un consultorio médico. Respondé la pregunta del \npaciente usando SOLO estos datos del consultorio:\n\n- Profesional: {{ $json.nombre }}\n- Especialidad: {{ $json.especialidad }}\n- Horario de atención: {{ $json.hora_inicio }} a {{ $json.hora_fin }}\n- Atiende sábados: {{ $json.atiende_sabados }}\n- Atiende domingos: {{ $json.atiende_domingos }}\n- Duración de la consulta: {{ $json.duracion_consulta_minutes }} minutos\n\nReglas estrictas:\n- NUNCA des consejo médico, diagnóstico, ni opinión sobre síntomas. Si preguntan \n  algo de ese tipo, respondé que eso lo tiene que hablar directamente con la \n  Dra. Pérez en la consulta.\n- Si no tenés la información para responder (precio, obra social, dirección, etc. \n  si no están en los datos de arriba), decilo con honestidad: \"No tengo ese dato \n  a mano, te va a confirmar el consultorio directamente.\"\n- Respondé corto y natural, como un mensaje de WhatsApp, no como un documento formal.\n- Si la pregunta es sobre sacar un turno, decile que puede escribir \"quiero un \n  turno\" para arrancar el proceso.\n\nPregunta del paciente: {{ $('Input').first().json.body.mensaje }}"
+              "content": "=Sos el asistente de WhatsApp de un consultorio médico. Respondé la pregunta del \npaciente usando SOLO estos datos del consultorio (puede haber más de un \nprofesional):\n\n{{ $json.profesionales }}\n\nReglas estrictas:\n- NUNCA des consejo médico, diagnóstico, ni opinión sobre síntomas. Si preguntan \n  algo de ese tipo, respondé que eso lo tiene que hablar directamente con el \n  profesional en la consulta.\n- Si no tenés la información para responder (precio, obra social, dirección, etc. \n  si no están en los datos de arriba), decilo con honestidad: \"No tengo ese dato \n  a mano, te va a confirmar el consultorio directamente.\"\n- Respondé corto y natural, como un mensaje de WhatsApp, no como un documento formal.\n- Si la pregunta es sobre sacar un turno, decile que puede escribir \"quiero un \n  turno\" para arrancar el proceso.\n\nPregunta del paciente: {{ $('Input').first().json.body.mensaje }}"
             }
           ]
         },
@@ -801,10 +958,10 @@
       "type": "@n8n/n8n-nodes-langchain.anthropic",
       "typeVersion": 1,
       "position": [
-        -192,
-        736
+        -2784,
+        1472
       ],
-      "id": "802d6f5e-f46e-42c6-a591-f2f6728e439e",
+      "id": "86dc8e05-ee3b-4d72-b88b-0875ce3e5e5a",
       "name": "Message a model1",
       "credentials": {
         "anthropicApi": {
@@ -822,34 +979,11 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        384,
-        736
+        -1760,
+        1472
       ],
-      "id": "4fc62a23-4f28-49cb-83bc-1489cc9789e1",
+      "id": "1dca7942-41ad-4749-a8a5-ad91f152fa70",
       "name": "Respond to Webhook1"
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "25c910d8-17df-4235-936f-5c9eef1a6443",
-              "name": "output",
-              "value": "Entiendo tu consulta. Este canal no puede darte indicaciones médicas ni recomendarte medicación — eso lo tiene que evaluar la Doctora directamente.\n\nYa le avisamos al consultorio de tu mensaje para que te contacten.\n\nSi es una urgencia o los síntomas empeoran, comunicate al 911 o acercate a la guardia más cercana, no esperes nuestra respuesta.",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        160,
-        928
-      ],
-      "id": "0bdd6917-8f1a-46ff-9910-4cc781bfc2a3",
-      "name": "Set Output - PREGUNTA1"
     },
     {
       "parameters": {
@@ -861,10 +995,10 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        -128,
-        928
+        -3008,
+        1664
       ],
-      "id": "491e3201-0a8f-4da0-97b2-a5aaadfcf08b",
+      "id": "179361b6-4fab-441c-a93e-f457c1adf842",
       "name": "Send a message",
       "webhookId": "bf28014a-7b37-48d1-99db-7f74c963a37e",
       "credentials": {
@@ -883,10 +1017,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        384,
-        928
+        -1984,
+        1664
       ],
-      "id": "a4ee0d26-1e56-43ed-9a5f-4e7bc29b1b82",
+      "id": "6e78ac93-56e9-49be-b94a-68f566c9f59c",
       "name": "Respond to Webhook2"
     },
     {
@@ -898,10 +1032,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -416,
-        448
+        -3008,
+        1184
       ],
-      "id": "d3fa268e-3a79-477d-a402-c65a2999b893",
+      "id": "55f80208-7543-4fc2-ad58-497b04fabc6a",
       "name": "Execute a SQL query7",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -941,10 +1075,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -128,
-        448
+        -2720,
+        1184
       ],
-      "id": "c46d21aa-c032-439a-b885-fbfacd8a1049",
+      "id": "cb58e80c-e857-4bbe-950d-f06edb2134bb",
       "name": "If2"
     },
     {
@@ -956,10 +1090,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        160,
-        352
+        -2432,
+        1088
       ],
-      "id": "c2ba4607-1dbe-4d31-a358-cc2f6dac7c51",
+      "id": "b65d161d-7ea8-4a9b-8539-53cd3d0200f4",
       "name": "Execute a SQL query8",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -977,7 +1111,7 @@
             {
               "id": "88a4b09c-0255-407c-9c5e-2cc825f75ec5",
               "name": "output",
-              "value": "=¿Confirmás que querés cancelar tu turno del {{ $('If2').item.json.start_time }} ? Respondé SI o NO.\"",
+              "value": "=¿Confirmás que querés cancelar tu turno del {{ DateTime.fromISO($('If2').item.json.start_time).setZone('America/Argentina/Buenos_Aires').setLocale('es').toFormat('dd/MM/yyyy') }} a las {{ DateTime.fromISO($('If2').item.json.start_time).setZone('America/Argentina/Buenos_Aires').toFormat('HH:mm') }}? Respondé SI o NO.\\\"",
               "type": "string"
             }
           ]
@@ -987,10 +1121,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        384,
-        352
+        -2208,
+        1088
       ],
-      "id": "7f8f162c-23bb-45c0-ba53-71d567edfb5e",
+      "id": "c6449b7d-de86-4308-9a21-a4caff25be8b",
       "name": "Set Output - CONFIRMAR Cancelacion"
     },
     {
@@ -1000,10 +1134,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -928,
-        -128
+        -3520,
+        608
       ],
-      "id": "4de083c1-c8bb-42ab-afe5-a0a7d7399432",
+      "id": "9b54dc8e-b61e-4049-be76-a9b68e1142c5",
       "name": "Code in JavaScript2"
     },
     {
@@ -1034,10 +1168,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -640,
-        -128
+        -3232,
+        608
       ],
-      "id": "8ab20e3f-fc60-418f-beec-9d5e466db663",
+      "id": "94f57dec-6b9e-45c9-872a-ec891e7319ef",
       "name": "If3"
     },
     {
@@ -1049,10 +1183,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -416,
-        -224
+        -3008,
+        512
       ],
-      "id": "5dc0f3d7-f5ea-4d83-aaef-a7bb7a4e0317",
+      "id": "8a4f93f5-ebe9-490f-8f7a-4f9e1e56ae16",
       "name": "Execute a SQL query9",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -1072,10 +1206,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -128,
-        -224
+        -2720,
+        512
       ],
-      "id": "cfb6da61-45e9-4691-a03e-7e714d1f65a9",
+      "id": "cafc7d56-ef77-468a-ba8d-9f5af864e646",
       "name": "Execute a SQL query10",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -1088,29 +1222,6 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
-              "name": "output",
-              "value": "Listo, cancelamos tu turno. Si necesitás agendar uno nuevo, escribinos cuando quieras",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        160,
-        -224
-      ],
-      "id": "9eccfa01-3129-4f4c-8a21-e34cf2df276f",
-      "name": "Set Output - Turno Confirmado1"
-    },
-    {
-      "parameters": {
         "operation": "executeQuery",
         "query": "delete from conversaciones_activas where telefono = '{{ $('Input').first().json.body.telefono }}';",
         "options": {}
@@ -1118,10 +1229,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -128,
-        -32
+        -2720,
+        704
       ],
-      "id": "e42b1284-b310-4eb8-97a3-a049b424073d",
+      "id": "c6d3fa39-033b-4b4c-b7e3-6aba94513de1",
       "name": "Execute a SQL query11",
       "alwaysOutputData": true,
       "retryOnFail": true,
@@ -1134,29 +1245,6 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
-              "name": "output",
-              "value": "Perfecto, tu turno sigue reservado como estaba.",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        160,
-        -32
-      ],
-      "id": "70df86be-7162-4f8a-9629-b73e5be68758",
-      "name": "Set Output - Turno Confirmado2"
-    },
-    {
-      "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
         "options": {}
@@ -1164,10 +1252,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        384,
-        -128
+        -1760,
+        608
       ],
-      "id": "5ad238ab-ed26-499a-8fb2-be76ff458db9",
+      "id": "5e485546-620b-41e4-89b4-8d903fd9f84d",
       "name": "Respond to Webhook - Turno Confirmado1"
     },
     {
@@ -1187,25 +1275,1799 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -128,
-        -992
+        -2720,
+        -256
       ],
-      "id": "ea0553d1-c181-4d01-b3ab-aa2187784259",
+      "id": "a98a2198-4839-4edd-bfd2-fc8b7c136397",
       "name": "Set Output - Eligiendo Horario"
     },
     {
       "parameters": {
-        "height": 368,
-        "width": 528
+        "calendar": {
+          "__rl": true,
+          "value": "juanv87@gmail.com",
+          "mode": "list",
+          "cachedResultName": "juanv87@gmail.com"
+        },
+        "start": "={{ $('Switch1').first().json.contexto.horario_elegido }}",
+        "end": "={{ new Date(new Date($('Switch1').first().json.contexto.horario_elegido).getTime() + 30*60000).toISOString() }}",
+        "additionalFields": {
+          "description": "Turno agendado automáticamente vía WhatsApp",
+          "summary": "={{ \"Turno: \" + $('Postgres - Nombre Paciente').first().json.nombre + \" - \" + $('Switch1').first().json.contexto.horario_elegido.slice(11, 16) }}"
+        }
       },
-      "type": "n8n-nodes-base.stickyNote",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
       "position": [
-        -1776,
-        -928
+        -2720,
+        320
       ],
-      "typeVersion": 1,
-      "id": "74812770-f776-43e2-a4ea-1baac11ee3ab",
-      "name": "Sticky Note"
+      "id": "d091a99c-0863-4899-aac1-4327b4c12a30",
+      "name": "Create an event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "EJ14wAK9Z4Of2WPH",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select p.nombre, p.email, pr.nombre as profesional_nombre\nfrom pacientes p\njoin profesionales pr on pr.id = '{{ $('Switch1').first().json.contexto.profesional_id }}'::uuid\nwhere p.telefono = '{{ $('Input').first().json.body.telefono }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3008,
+        320
+      ],
+      "id": "738426df-f8ba-4389-8801-dc362ef401ad",
+      "name": "Postgres - Nombre Paciente",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "juanv87@gmail.com",
+        "subject": "={{ \"Nuevo turno agendado: \" + $('Postgres - Nombre Paciente').first().json.nombre }}",
+        "message": "=Se agendó un nuevo turno vía WhatsApp.\n\nPaciente: {{ $('Postgres - Nombre Paciente').first().json.nombre }}\nTeléfono: {{ $('Input').first().json.body.telefono }}\nFecha y hora: {{ $('Switch1').first().json.contexto.horario_elegido }}\n\nYa se agregó automáticamente al calendario.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -2432,
+        320
+      ],
+      "id": "8aff398c-230f-4a04-bb6c-67db01da54a7",
+      "name": "Avisar al consultorio",
+      "webhookId": "bf28014a-7b37-48d1-99db-7f74c963a37e",
+      "retryOnFail": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "mOd9cxG3JSAyFq9r",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1760,
+        320
+      ],
+      "id": "5fe941f5-c083-4c2c-b517-41cc0e5a6a45",
+      "name": "Call 'Log Mensaje'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "paciente",
+            "contenido": "={{ $('Input').first().json.body.mensaje }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -4256,
+        416
+      ],
+      "id": "d5ba8625-fd30-4409-a057-0a9676e5cf0d",
+      "name": "Call 'Log Mensaje'1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
+              "name": "output",
+              "value": "Listo, cancelamos tu turno. Si necesitás agendar uno nuevo, escribinos cuando quieras",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2432,
+        512
+      ],
+      "id": "14152779-f9c7-450d-8e59-a9cd7041ce8f",
+      "name": "Cancelación Confirmada"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
+              "name": "output",
+              "value": "Perfecto, tu turno sigue reservado como estaba.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2432,
+        704
+      ],
+      "id": "5d090d97-93c2-44d0-8a50-131fdb634a72",
+      "name": "Turno Mantenido"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25c910d8-17df-4235-936f-5c9eef1a6443",
+              "name": "output",
+              "value": "Entiendo tu consulta. Este canal no puede darte indicaciones médicas ni recomendarte medicación — eso lo tiene que evaluar la Doctora directamente.\n\nYa le avisamos al consultorio de tu mensaje para que te contacten.\n\nSi es una urgencia o los síntomas empeoran, comunicate al 911 o acercate a la guardia más cercana, no esperes nuestra respuesta.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2720,
+        1664
+      ],
+      "id": "21174643-8663-4588-9cf4-77baeb40aa03",
+      "name": "Set Output - URGENTE"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2208,
+        608
+      ],
+      "id": "99ae2900-b082-4fad-960e-ea6a57bc09b2",
+      "name": "Call 'Log Mensaje'2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
+              "name": "output",
+              "value": "={{ $('Set Output - Turno Confirmado').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1536,
+        320
+      ],
+      "id": "7c8b3266-3d0e-4cbd-aace-73d187f497e6",
+      "name": "Set Output - Turno Confirmado1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5af76f5c-1fb7-462d-b694-f297b4c82650",
+              "name": "output",
+              "value": "={{ $('Cancelación Confirmada').isExecuted ? $('Cancelación Confirmada').first().json.output : $('Turno Mantenido').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1984,
+        608
+      ],
+      "id": "e4d7514e-cd0a-4f87-8a28-33efdd084d1c",
+      "name": "Set Output - Turno Confirmado2"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1760,
+        896
+      ],
+      "id": "f33d80f8-3dce-4f42-a100-cdc87edf8ca1",
+      "name": "Call 'Log Mensaje'3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-0002-4a11-9a11-000000000002",
+              "name": "output",
+              "value": "={{ $('Edit Fields').isExecuted ? $('Edit Fields').first().json.output : $('Set Output - Eligiendo Profesional').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1536,
+        896
+      ],
+      "id": "a7629ebd-085f-4068-bd92-7a1e56b7d708",
+      "name": "Restaurar Output - Horarios Disponibles"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -3008,
+        -64
+      ],
+      "id": "76cebc41-68f3-42f7-b5cf-41edc868fb27",
+      "name": "Call 'Log Mensaje'4"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-0004-4a11-9a11-000000000004",
+              "name": "output",
+              "value": "={{ $('Code in JavaScript1').isExecuted ? $('Code in JavaScript1').first().json.output : $('Code in JavaScript - Validar Profesional').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2720,
+        -64
+      ],
+      "id": "bf2d8d0c-75eb-4dfb-8e0c-ebe2076a4556",
+      "name": "Restaurar Output - Numero Invalido"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2432,
+        -256
+      ],
+      "id": "7afdd62a-0436-48fa-9d0c-1ad0e315e5b4",
+      "name": "Call 'Log Mensaje'5"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-0006-4a11-9a11-000000000006",
+              "name": "output",
+              "value": "={{ $('Set Output - Eligiendo Horario').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2208,
+        -256
+      ],
+      "id": "6b5d8a4f-219f-4e81-b677-337138d8434f",
+      "name": "Restaurar Output - Eligiendo Horario"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2720,
+        128
+      ],
+      "id": "00131c3f-c62a-4065-8cfe-03b018f5be12",
+      "name": "Call 'Log Mensaje'6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-0008-4a11-9a11-000000000008",
+              "name": "output",
+              "value": "={{ $('Set Output - Conflicto Horario').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2432,
+        128
+      ],
+      "id": "36db43f7-4390-4844-8e9e-8327160d0f5c",
+      "name": "Restaurar Output - Conflicto Horario"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2208,
+        1472
+      ],
+      "id": "4b739abd-f3f7-4b13-8985-d6482637a380",
+      "name": "Call 'Log Mensaje'7"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-000a-4a11-9a11-00000000000a",
+              "name": "output",
+              "value": "={{ $('Set Output - PREGUNTA').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1984,
+        1472
+      ],
+      "id": "f6be620c-23a8-4261-a83c-d692b2b4b8d2",
+      "name": "Restaurar Output - Pregunta"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2432,
+        1664
+      ],
+      "id": "c69c2864-b780-4771-8a27-7887f099a846",
+      "name": "Call 'Log Mensaje'8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-000c-4a11-9a11-00000000000c",
+              "name": "output",
+              "value": "={{ $('Set Output - URGENTE').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2208,
+        1664
+      ],
+      "id": "e1d9a40f-5762-4f79-b880-5aeb16a95b3c",
+      "name": "Restaurar Output - Urgente"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "contenido",
+              "displayName": "contenido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2208,
+        1280
+      ],
+      "id": "42ae1b34-3245-4e61-a03c-d8058ea5d8a4",
+      "name": "Call 'Log Mensaje'9"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa2b3c4d-000e-4a11-9a11-00000000000e",
+              "name": "output",
+              "value": "={{ $('Set Output - CANCELAR').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1984,
+        1280
+      ],
+      "id": "c30a57a3-69ad-42eb-9302-381751e5ff7a",
+      "name": "Restaurar Output - Cancelar Sin Turno"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1760,
+        1280
+      ],
+      "id": "5b315d5f-efc4-488d-b22c-24f104e9415e",
+      "name": "Respond to Webhook7"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select contenido\nfrom mensajes\nwhere telefono = '{{ $('Input').first().json.body.telefono }}'\n  and remitente = 'bot'\norder by created_at desc\nlimit 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3840,
+        1008
+      ],
+      "id": "a695dc9a-bd34-443c-80fd-78cf8d1aa3b7",
+      "name": "Postgres - Ultimo mensaje del bot",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "26883a38-37cb-41a5-bdf8-c144a9c10068",
+              "leftValue": "={{ $('Postgres - Nombre Paciente').first().json.email }}",
+              "rightValue": true,
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2432,
+        1850
+      ],
+      "id": "7f171bec-61dd-4b7c-8876-3903443032eb",
+      "name": "If - Paciente Tiene Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Postgres - Nombre Paciente').first().json.email }}",
+        "subject": "Confirmación de tu turno",
+        "emailType": "html",
+        "message": "={{ (() => { const nombre = $('Postgres - Nombre Paciente').first().json.nombre; const profesional = $('Postgres - Nombre Paciente').first().json.profesional_nombre; const fecha = new Date($('Switch1').first().json.contexto.horario_elegido); const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; const diaNombre = diasSemana[fecha.getDay()]; const diaMes = fecha.getDate(); const min = fecha.getMinutes(); const horaTexto = min === 0 ? `${fecha.getHours()}hs` : `${fecha.getHours()}:${min.toString().padStart(2, '0')}hs`; return `<div style=\"background:#f8fafc;padding:32px 16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;\"><p style=\"margin:0 0 20px;color:#0f172a;font-size:15px;\">Hola ${nombre},</p><div style=\"max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;\"><div style=\"background:#0369a1;padding:16px 24px;\"><p style=\"margin:0;color:#ffffff;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;\">Turno confirmado</p></div><div style=\"padding:24px;\"><p style=\"margin:0 0 12px;color:#0f172a;font-size:20px;font-weight:700;\">${diaNombre} ${diaMes} a las ${horaTexto}</p><p style=\"margin:0;color:#64748b;font-size:14px;\">Con ${profesional}</p></div></div><p style=\"margin:20px 0 0;color:#64748b;font-size:14px;\">¡Te esperamos!</p></div>`; })() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -2208,
+        1770
+      ],
+      "id": "3f3510b1-5d51-43b1-a45c-2b9835c671a4",
+      "name": "Gmail - Confirmar Turno al Paciente",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "mOd9cxG3JSAyFq9r",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into conversaciones_activas (telefono, estado, contexto, updated_at)\nvalues (\n  '{{ $('Input').first().json.body.telefono }}',\n  'esperando_confirmacion_email',\n  '{{ JSON.stringify({ horario_elegido: $('Switch1').first().json.contexto.horario_elegido, profesional_id: $('Switch1').first().json.contexto.profesional_id, profesional_nombre: $('Postgres - Nombre Paciente').first().json.profesional_nombre, paciente_nombre: $('Postgres - Nombre Paciente').first().json.nombre }) }}'::jsonb,\n  now()\n)\non conflict (telefono)\ndo update set estado = excluded.estado, contexto = excluded.contexto, updated_at = now();",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2208,
+        1930
+      ],
+      "id": "559ae4a9-780b-472c-b35f-6a2fd5164c6e",
+      "name": "Postgres - Guardar Estado Esperando Confirmacion Email",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9d3ff4fe-ac99-4d58-8631-9422229724d6",
+              "name": "output",
+              "value": "={{ (() => { const fecha = new Date($('Switch1').first().json.contexto.horario_elegido); const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; const diaNombre = diasSemana[fecha.getDay()]; const diaMes = fecha.getDate(); const min = fecha.getMinutes(); const horaTexto = min === 0 ? `${fecha.getHours()}hs` : `${fecha.getHours()}:${min.toString().padStart(2, '0')}hs`; return `Turno confirmado para el ${diaNombre} ${diaMes} a las ${horaTexto}. ¡Te esperamos!\\n\\n¿Querés que te recordemos este turno por correo un día antes? Respondé SI o NO.`; })() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1984,
+        1930
+      ],
+      "id": "01ff6b99-3b14-480a-b20d-adb081a41474",
+      "name": "Set Output - Turno Confirmado (Pedir Email)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "remitente", "displayName": "remitente", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "contenido", "displayName": "contenido", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -1760,
+        1930
+      ],
+      "id": "c333ea64-2380-4989-8176-7b41e87ea8bf",
+      "name": "Call 'Log Mensaje'10"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "797c9306-d130-4526-bd15-41404bea188e",
+              "name": "output",
+              "value": "={{ $('Set Output - Turno Confirmado (Pedir Email)').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1536,
+        1930
+      ],
+      "id": "89c5de93-8de8-452a-95ab-26b3b664e4a5",
+      "name": "Restaurar Output - Pedir Email"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1312,
+        1930
+      ],
+      "id": "f541df55-7c52-4308-a431-e145b0afd17e",
+      "name": "Respond to Webhook - Pedir Email"
+    },
+    {
+      "parameters": {
+        "jsCode": "const respuesta = $('Input').first().json.body.mensaje.trim().toLowerCase();\nconst confirmado = respuesta.includes('si') || respuesta.includes('sí');\nconst contexto = $json.contexto; // { horario_elegido, profesional_id, profesional_nombre, paciente_nombre }\n\nreturn [{\n  json: {\n    confirmado,\n    contexto\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3520,
+        2100
+      ],
+      "id": "422d986c-a7ec-413c-8a9d-15ba1ebd8e7f",
+      "name": "Code in JavaScript - Validar Respuesta Email"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8d3f207a-9b65-4faa-9c02-2780aec88692",
+              "leftValue": "={{ $json.confirmado }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3232,
+        2100
+      ],
+      "id": "f58e8d15-5364-46b4-b6f3-15ebc5c4759e",
+      "name": "If - Quiere Recordatorio Email"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update conversaciones_activas\nset estado = 'esperando_email',\n    contexto = '{{ JSON.stringify($json.contexto) }}'::jsonb,\n    updated_at = now()\nwhere telefono = '{{ $('Input').first().json.body.telefono }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3008,
+        2020
+      ],
+      "id": "999fcc13-259c-43e7-9731-94fe1abdaf8f",
+      "name": "Postgres - Guardar Estado Esperando Email",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "391f9482-c693-40d3-b4eb-234b19714ae3",
+              "name": "output",
+              "value": "Pasame tu correo electrónico y te vamos a recordar el turno un día antes.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2784,
+        2020
+      ],
+      "id": "01ec89a2-3c32-4555-935e-5ca7e3607984",
+      "name": "Set Output - Pedir Email Directo"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "remitente", "displayName": "remitente", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "contenido", "displayName": "contenido", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2560,
+        2020
+      ],
+      "id": "05d8dc7f-4e81-45bd-907d-1c78a3c233d2",
+      "name": "Call 'Log Mensaje'11"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c258c8b1-699a-47bd-8fb2-368906aa5425",
+              "name": "output",
+              "value": "={{ $('Set Output - Pedir Email Directo').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2336,
+        2020
+      ],
+      "id": "64b1bdde-b57f-4ccb-8a95-87628fa608f9",
+      "name": "Restaurar Output - Pedir Email Directo"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -2112,
+        2020
+      ],
+      "id": "b57c4331-e8f2-406f-8a9f-923ba9c56c60",
+      "name": "Respond to Webhook - Pedir Email Directo"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "delete from conversaciones_activas where telefono = '{{ $('Input').first().json.body.telefono }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3008,
+        2180
+      ],
+      "id": "438433f2-0caf-4c56-9284-de91bb1a9334",
+      "name": "Postgres - Borrar Estado Email Rechazado",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "80414380-af81-4b9d-a9ee-1fda60673809",
+              "name": "output",
+              "value": "Listo, no vamos a enviarte recordatorios por correo. ¡Nos vemos en tu turno!",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2784,
+        2180
+      ],
+      "id": "f6b23668-5547-4fb6-a539-facd21b95991",
+      "name": "Set Output - Recordatorio Email Rechazado"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "remitente", "displayName": "remitente", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "contenido", "displayName": "contenido", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2560,
+        2180
+      ],
+      "id": "c41400c4-576d-47f7-b47c-4dcf544865af",
+      "name": "Call 'Log Mensaje'12"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5f428b7f-20e0-4d4c-8f5c-97344303825b",
+              "name": "output",
+              "value": "={{ $('Set Output - Recordatorio Email Rechazado').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2336,
+        2180
+      ],
+      "id": "4b8ce079-5bcd-4f2d-96ea-3ebd55e87ada",
+      "name": "Restaurar Output - Email Rechazado"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -2112,
+        2180
+      ],
+      "id": "c5109af8-35a8-4032-bdaa-2b9580f5e8e1",
+      "name": "Respond to Webhook - Email Rechazado"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mensajeUsuario = $('Input').first().json.body.mensaje.trim();\nconst contexto = $json.contexto; // { horario_elegido, profesional_id, profesional_nombre, paciente_nombre }\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\nif (!emailRegex.test(mensajeUsuario)) {\n  return [{\n    json: {\n      valido: false,\n      output: 'Ese correo no parece válido. Por favor, escribilo de nuevo (ej: nombre@ejemplo.com).'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    valido: true,\n    email: mensajeUsuario,\n    contexto\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3520,
+        2350
+      ],
+      "id": "3ee94c03-070b-42ab-b92b-ca64603f536f",
+      "name": "Code in JavaScript - Validar Email"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a28785e4-218c-4133-86cb-9693fe4e568b",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3232,
+        2350
+      ],
+      "id": "cece6c01-9bc8-41d8-860e-e1971ea5067e",
+      "name": "If - Email Valido"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update pacientes set email = '{{ $json.email }}' where telefono = '{{ $('Input').first().json.body.telefono }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3008,
+        2270
+      ],
+      "id": "5e3c65a1-d331-4bf4-83fc-f45f835b82c7",
+      "name": "Postgres - Guardar Email Paciente",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Code in JavaScript - Validar Email').first().json.email }}",
+        "subject": "Confirmación de tu turno",
+        "emailType": "html",
+        "message": "={{ (() => { const nombre = $('Code in JavaScript - Validar Email').first().json.contexto.paciente_nombre; const profesional = $('Code in JavaScript - Validar Email').first().json.contexto.profesional_nombre; const fecha = new Date($('Code in JavaScript - Validar Email').first().json.contexto.horario_elegido); const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; const diaNombre = diasSemana[fecha.getDay()]; const diaMes = fecha.getDate(); const min = fecha.getMinutes(); const horaTexto = min === 0 ? `${fecha.getHours()}hs` : `${fecha.getHours()}:${min.toString().padStart(2, '0')}hs`; return `<div style=\"background:#f8fafc;padding:32px 16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;\"><p style=\"margin:0 0 20px;color:#0f172a;font-size:15px;\">Hola ${nombre},</p><div style=\"max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;\"><div style=\"background:#0369a1;padding:16px 24px;\"><p style=\"margin:0;color:#ffffff;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;\">Turno confirmado</p></div><div style=\"padding:24px;\"><p style=\"margin:0 0 12px;color:#0f172a;font-size:20px;font-weight:700;\">${diaNombre} ${diaMes} a las ${horaTexto}</p><p style=\"margin:0;color:#64748b;font-size:14px;\">Con ${profesional}</p></div></div><p style=\"margin:20px 0 0;color:#64748b;font-size:14px;\">¡Te esperamos!</p></div>`; })() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -2784,
+        2270
+      ],
+      "id": "973f4d17-dd6c-4a6b-ae51-629bb3eb70ae",
+      "name": "Gmail - Confirmar Turno al Paciente1",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "mOd9cxG3JSAyFq9r",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "delete from conversaciones_activas where telefono = '{{ $('Input').first().json.body.telefono }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2560,
+        2270
+      ],
+      "id": "5f47d820-dfc5-481a-a065-74df08d43526",
+      "name": "Postgres - Borrar Estado Email Guardado",
+      "credentials": {
+        "postgres": {
+          "id": "Neseq0Xezi4xtLrb",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "771b4300-dd29-41f9-8726-c063780cc4ae",
+              "name": "output",
+              "value": "¡Listo! Guardamos tu correo y te va a llegar un mail con los datos del turno.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2336,
+        2270
+      ],
+      "id": "132aaf16-15f2-4475-93e8-8f29264765e0",
+      "name": "Set Output - Email Guardado"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "remitente", "displayName": "remitente", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "contenido", "displayName": "contenido", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2112,
+        2270
+      ],
+      "id": "498661f7-64b5-49f0-af5e-cb218be51cd3",
+      "name": "Call 'Log Mensaje'13"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e807a66f-288a-4383-b895-b7e27efd5354",
+              "name": "output",
+              "value": "={{ $('Set Output - Email Guardado').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1888,
+        2270
+      ],
+      "id": "9e95c831-6bbb-42e8-92ed-8c96e19a13d0",
+      "name": "Restaurar Output - Email Guardado"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1664,
+        2270
+      ],
+      "id": "6460d149-f67c-4d27-b125-b4c201c90b3b",
+      "name": "Respond to Webhook - Email Guardado"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "86d27e3e-3885-4933-8d33-6a17578097bf",
+              "name": "output",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3008,
+        2450
+      ],
+      "id": "8b7576f7-156d-41f1-add1-f9d6906b97af",
+      "name": "Set Output - Email Invalido"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "PEr1zjn39MEv4B0i",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/PEr1zjn39MEv4B0i",
+          "cachedResultName": "Log Mensaje"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Input').first().json.body.telefono }}",
+            "remitente": "bot",
+            "contenido": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "remitente", "displayName": "remitente", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false },
+            { "id": "contenido", "displayName": "contenido", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string", "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -2784,
+        2450
+      ],
+      "id": "3c6e9837-edbc-4ed3-8925-1aab90464d40",
+      "name": "Call 'Log Mensaje'14"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f50e62dc-12bc-43d6-9b8b-f5403c0f722f",
+              "name": "output",
+              "value": "={{ $('Set Output - Email Invalido').first().json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2560,
+        2450
+      ],
+      "id": "02192eda-166d-4645-8d4b-428ffe651a57",
+      "name": "Restaurar Output - Email Invalido"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"output\": {{ JSON.stringify($json.output) }} }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -2336,
+        2450
+      ],
+      "id": "833e63ed-9691-4baf-8b6e-429105184cb8",
+      "name": "Respond to Webhook - Email Invalido"
     }
   ],
   "pinData": {},
@@ -1214,16 +3076,11 @@
       "main": [
         [
           {
-            "node": "Execute a SQL query1",
+            "node": "Input",
             "type": "main",
             "index": 0
           }
         ]
-      ]
-    },
-    "Respond to Webhook": {
-      "main": [
-        []
       ]
     },
     "Message a model": {
@@ -1262,7 +3119,7 @@
         ],
         [
           {
-            "node": "Set Output - URGENTE",
+            "node": "Send a message",
             "type": "main",
             "index": 0
           }
@@ -1273,7 +3130,69 @@
       "main": [
         [
           {
+            "node": "Code in JavaScript - Listar Profesionales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - Listar Profesionales": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query - Eligiendo Profesional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query - Eligiendo Profesional": {
+      "main": [
+        [
+          {
+            "node": "Set Output - Eligiendo Profesional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Eligiendo Profesional": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - Validar Profesional": {
+      "main": [
+        [
+          {
+            "node": "If - Profesional Valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If - Profesional Valido": {
+      "main": [
+        [
+          {
             "node": "Supabase - Turnos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call 'Log Mensaje'4",
             "type": "main",
             "index": 0
           }
@@ -1349,7 +3268,33 @@
         ],
         [
           {
+            "node": "Code in JavaScript - Validar Profesional",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript - Validar Respuesta Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript - Validar Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Message a model",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres - Ultimo mensaje del bot",
             "type": "main",
             "index": 0
           }
@@ -1376,6 +3321,28 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Call 'Log Mensaje'4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'4": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Numero Invalido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Numero Invalido": {
+      "main": [
         [
           {
             "node": "Respond to Webhook5",
@@ -1418,7 +3385,7 @@
         ],
         [
           {
-            "node": "Execute a SQL query5",
+            "node": "Postgres - Nombre Paciente",
             "type": "main",
             "index": 0
           }
@@ -1440,7 +3407,7 @@
       "main": [
         [
           {
-            "node": "Execute a SQL query1",
+            "node": "Call 'Log Mensaje'1",
             "type": "main",
             "index": 0
           }
@@ -1448,6 +3415,28 @@
       ]
     },
     "Set Output - Conflicto Horario": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'6": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Conflicto Horario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Conflicto Horario": {
       "main": [
         [
           {
@@ -1473,7 +3462,7 @@
       "main": [
         [
           {
-            "node": "Respond to Webhook - Turno Confirmado",
+            "node": "Call 'Log Mensaje'",
             "type": "main",
             "index": 0
           }
@@ -1481,6 +3470,28 @@
       ]
     },
     "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'3": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Horarios Disponibles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Horarios Disponibles": {
       "main": [
         [
           {
@@ -1517,29 +3528,29 @@
       "main": [
         [
           {
+            "node": "Call 'Log Mensaje'7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'7": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Pregunta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Pregunta": {
+      "main": [
+        [
+          {
             "node": "Respond to Webhook1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Output - URGENTE": {
-      "main": [
-        [
-          {
-            "node": "Send a message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Output - PREGUNTA1": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook2",
             "type": "main",
             "index": 0
           }
@@ -1550,7 +3561,7 @@
       "main": [
         [
           {
-            "node": "Set Output - PREGUNTA1",
+            "node": "Set Output - URGENTE",
             "type": "main",
             "index": 0
           }
@@ -1580,6 +3591,39 @@
         [
           {
             "node": "Set Output - CANCELAR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - CANCELAR": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'9": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Cancelar Sin Turno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Cancelar Sin Turno": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook7",
             "type": "main",
             "index": 0
           }
@@ -1641,7 +3685,7 @@
       "main": [
         [
           {
-            "node": "Set Output - Turno Confirmado1",
+            "node": "Cancelación Confirmada",
             "type": "main",
             "index": 0
           }
@@ -1649,6 +3693,478 @@
       ]
     },
     "Execute a SQL query11": {
+      "main": [
+        [
+          {
+            "node": "Turno Mantenido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Eligiendo Horario": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'5": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Eligiendo Horario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Eligiendo Horario": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an event": {
+      "main": [
+        [
+          {
+            "node": "Avisar al consultorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Nombre Paciente": {
+      "main": [
+        [
+          {
+            "node": "Create an event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar al consultorio": {
+      "main": [
+        [
+          {
+            "node": "If - Paciente Tiene Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If - Paciente Tiene Email": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Confirmar Turno al Paciente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres - Guardar Estado Esperando Confirmacion Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Confirmar Turno al Paciente": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Guardar Estado Esperando Confirmacion Email": {
+      "main": [
+        [
+          {
+            "node": "Set Output - Turno Confirmado (Pedir Email)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Turno Confirmado (Pedir Email)": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'10": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Pedir Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Pedir Email": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Pedir Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - Validar Respuesta Email": {
+      "main": [
+        [
+          {
+            "node": "If - Quiere Recordatorio Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If - Quiere Recordatorio Email": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Guardar Estado Esperando Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres - Borrar Estado Email Rechazado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Guardar Estado Esperando Email": {
+      "main": [
+        [
+          {
+            "node": "Set Output - Pedir Email Directo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Pedir Email Directo": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'11": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Pedir Email Directo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Pedir Email Directo": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Pedir Email Directo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Borrar Estado Email Rechazado": {
+      "main": [
+        [
+          {
+            "node": "Set Output - Recordatorio Email Rechazado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Recordatorio Email Rechazado": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'12": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Email Rechazado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Email Rechazado": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Email Rechazado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript - Validar Email": {
+      "main": [
+        [
+          {
+            "node": "If - Email Valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If - Email Valido": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Guardar Email Paciente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Output - Email Invalido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Guardar Email Paciente": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Confirmar Turno al Paciente1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Confirmar Turno al Paciente1": {
+      "main": [
+        [
+          {
+            "node": "Postgres - Borrar Estado Email Guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres - Borrar Estado Email Guardado": {
+      "main": [
+        [
+          {
+            "node": "Set Output - Email Guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Email Guardado": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'13",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'13": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Email Guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Email Guardado": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Email Guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - Email Invalido": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'14",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'14": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Email Invalido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Email Invalido": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook - Email Invalido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancelación Confirmada": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Turno Mantenido": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Output - URGENTE": {
+      "main": [
+        [
+          {
+            "node": "Call 'Log Mensaje'8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'8": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Output - Urgente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Output - Urgente": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'": {
+      "main": [
+        [
+          {
+            "node": "Set Output - Turno Confirmado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Log Mensaje'2": {
       "main": [
         [
           {
@@ -1663,7 +4179,7 @@
       "main": [
         [
           {
-            "node": "Respond to Webhook - Turno Confirmado1",
+            "node": "Respond to Webhook - Turno Confirmado",
             "type": "main",
             "index": 0
           }
@@ -1681,11 +4197,11 @@
         ]
       ]
     },
-    "Set Output - Eligiendo Horario": {
+    "Postgres - Ultimo mensaje del bot": {
       "main": [
         [
           {
-            "node": "Respond to Webhook4",
+            "node": "Message a model",
             "type": "main",
             "index": 0
           }
@@ -1698,7 +4214,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "42df1c83-5c7c-4ff5-b152-7af709f8dc33",
+  "versionId": "e69615ff-86bc-4035-9ad2-f3d80ebba4ab",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "052af547fa6dedaab801250a0426425c2c1468346a7dec1838caadb69dd35b0e"
